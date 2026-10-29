@@ -98,6 +98,9 @@ input,textarea,select{font:inherit;color:var(--text)}
 .send{width:38px;height:38px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;flex:none}
 .send:disabled{opacity:.35}
 .send.stop{background:var(--text);color:var(--bg)}
+.pdfchip{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px;max-width:220px}
+.pdfchip span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msg.user .pdfchip{margin-bottom:6px;background:var(--card)}
 .attach{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;flex:none;color:var(--muted)}
 
 /* drawer for phone */
@@ -167,10 +170,10 @@ input,textarea,select{font:inherit;color:var(--text)}
       <div class="comp-box">
         <div class="thumbs" id="thumbs"></div>
         <div class="comp-row">
-          <button class="attach" id="attachBtn" aria-label="添加图片">
+          <button class="attach" id="attachBtn" aria-label="添加图片或 PDF">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>
           </button>
-          <input type="file" id="fileIn" accept="image/*" multiple hidden>
+          <input type="file" id="fileIn" accept="image/*,application/pdf,.pdf" multiple hidden>
           <textarea id="input" rows="1" placeholder="给 Claude 发消息…" enterkeyhint="send"></textarea>
           <button class="send" id="sendBtn" aria-label="发送" disabled>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
@@ -349,8 +352,9 @@ function msgEl(m, i){
   el.className = "msg " + m.role;
   if(m.role === "user"){
     const b = document.createElement("div"); b.className = "bubble";
-    (Array.isArray(m.content)?m.content:[]).filter(x=>x.type==="image").forEach(x=>{
-      const img = document.createElement("img"); img.src = `data:${x.source.media_type};base64,${x.source.data}`; b.appendChild(img);
+    (Array.isArray(m.content)?m.content:[]).forEach(x=>{
+      if(x.type==="image"){ const img = document.createElement("img"); img.src = `data:${x.source.media_type};base64,${x.source.data}`; b.appendChild(img); }
+      else if(x.type==="document"){ const c = document.createElement("div"); c.className="pdfchip"; c.innerHTML="📄 <span></span>"; c.querySelector("span").textContent = x._name || "PDF"; b.appendChild(c); }
     });
     b.appendChild(document.createTextNode(textOf(m.content)));
     el.appendChild(b);
@@ -365,6 +369,8 @@ function msgEl(m, i){
     meta.appendChild(copy);
     if(i === cur.messages.length-1){
       const re = document.createElement("button"); re.textContent = "重新生成"; re.onclick = regenerate; meta.appendChild(re);
+      if(m.truncated){ const co = document.createElement("button"); co.textContent = "▶ 继续"; co.style.color = "var(--accent)"; co.style.fontWeight = "600";
+        co.onclick = () => { $("input").value = "请从上次中断的地方继续，不要重复已输出的内容。"; send(); }; meta.appendChild(co); }
     }
     if(m.usage){
       const u = document.createElement("span");
@@ -398,6 +404,18 @@ async function persist(){
 }
 
 /* ---------- images ---------- */
+const MAX_PDF = 30 * 1024 * 1024;
+function loadFile(file){
+  const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+  if(!isPdf) return loadImage(file);
+  if(file.size > MAX_PDF) return Promise.reject(new Error("PDF 太大（上限约 30MB）"));
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res({kind:"pdf", name:file.name, media_type:"application/pdf", data:String(r.result).split(",")[1]});
+    r.onerror = () => rej(new Error("PDF 无法读取"));
+    r.readAsDataURL(file);
+  });
+}
 function loadImage(file){
   return new Promise((res, rej) => {
     const url = URL.createObjectURL(file);
@@ -419,7 +437,8 @@ function renderThumbs(){
   const t = $("thumbs"); t.innerHTML = "";
   pending.forEach((p, i) => {
     const d = document.createElement("div"); d.className = "thumb";
-    d.innerHTML = `<img src="${p.url}"><button aria-label="移除">✕</button>`;
+    if(p.kind === "pdf"){ d.innerHTML = `<div class="pdfchip">📄 <span></span></div><button aria-label="移除">✕</button>`; d.querySelector("span").textContent = p.name; }
+    else d.innerHTML = `<img src="${p.url}"><button aria-label="移除">✕</button>`;
     d.querySelector("button").onclick = () => { pending.splice(i,1); renderThumbs(); updateSend(); };
     t.appendChild(d);
   });
@@ -444,10 +463,12 @@ async function send(){
   const text = $("input").value.trim();
   if(!text && !pending.length) return;
   if(!settings.apiKey){ openSettings(); toast("请先填入 API Key"); return; }
-  const content = pending.map(p => ({type:"image", source:{type:"base64", media_type:p.media_type, data:p.data}}));
+  const content = pending.map(p => p.kind === "pdf"
+    ? {type:"document", source:{type:"base64", media_type:"application/pdf", data:p.data}, _name:p.name}
+    : {type:"image", source:{type:"base64", media_type:p.media_type, data:p.data}});
   if(text) content.push({type:"text", text});
   cur.messages.push({role:"user", content});
-  if(!cur.title) cur.title = (text || "图片").slice(0, 30);
+  if(!cur.title) cur.title = (text || (pending.find(p=>p.kind==="pdf")||{}).name || "图片").slice(0, 30);
   $("input").value = ""; pending = []; renderThumbs(); autosize();
   await persist();
   renderMsgs();
@@ -463,7 +484,7 @@ async function regenerate(){
 function buildRequest(){
   const msgs = cur.messages
     .filter(m => !(m.role==="assistant" && !textOf(m.content).trim()))
-    .map(m => ({role:m.role, content: m.role==="assistant" ? [{type:"text", text:textOf(m.content)}] : JSON.parse(JSON.stringify(m.content))}));
+    .map(m => ({role:m.role, content: m.role==="assistant" ? [{type:"text", text:textOf(m.content)}] : JSON.parse(JSON.stringify(m.content, (k, v) => k.startsWith("_") ? undefined : v))}));
   // merge accidental consecutive same-role messages
   const merged = [];
   msgs.forEach(m => { const last = merged[merged.length-1]; if(last && last.role===m.role) last.content.push(...m.content); else merged.push(m); });
@@ -526,7 +547,7 @@ async function runAssistant(){
         } else if(ev.type === "message_delta"){
           if(ev.usage){ if(ev.usage.output_tokens!=null) usage.output = ev.usage.output_tokens;
             if(ev.usage.input_tokens) usage.input = ev.usage.input_tokens; }
-          if(ev.delta && ev.delta.stop_reason === "max_tokens") msg.error = "回复达到最大长度被截断，可在设置里调大“单次回复最大长度”。";
+          if(ev.delta && ev.delta.stop_reason === "max_tokens") { msg.truncated = true; msg.error = "回复太长，暂时停在这里。点下面的“▶ 继续”接着输出。"; }
           if(ev.delta && ev.delta.stop_reason === "refusal") msg.error = "Claude 拒绝了这个请求。";
         } else if(ev.type === "error"){
           throw new Error(explain(0, ev.error && ev.error.message || "服务器错误"));
@@ -634,13 +655,13 @@ async function init(){
   $("sendBtn").onclick = send;
   $("attachBtn").onclick = () => $("fileIn").click();
   $("fileIn").onchange = async e => {
-    for(const f of e.target.files){ try{ pending.push(await loadImage(f)); }catch(err){ toast(err.message); } }
+    for(const f of e.target.files){ try{ pending.push(await loadFile(f)); }catch(err){ toast(err.message); } }
     e.target.value = ""; renderThumbs(); updateSend();
   };
   input.addEventListener("paste", async e => {
-    const files = [...(e.clipboardData && e.clipboardData.files || [])].filter(f => f.type.startsWith("image/"));
+    const files = [...(e.clipboardData && e.clipboardData.files || [])].filter(f => f.type.startsWith("image/") || f.type === "application/pdf");
     if(!files.length) return; e.preventDefault();
-    for(const f of files){ try{ pending.push(await loadImage(f)); }catch{} }
+    for(const f of files){ try{ pending.push(await loadFile(f)); }catch{} }
     renderThumbs(); updateSend();
   });
 
