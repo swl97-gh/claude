@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="我的 Claude">
+<meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1c1b19" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" href="icon.png">
+<title>我的 Claude</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<style>
+:root{
+  --bg:#f7f5f0; --panel:#efece4; --card:#ffffff; --text:#22211e; --muted:#7a766c;
+  --line:#dedad0; --accent:#c96442; --accent-text:#fff; --user:#e9e4d8; --code:#f1eee6; --danger:#b3261e;
+  --sat:env(safe-area-inset-top); --sab:env(safe-area-inset-bottom);
+  --sal:env(safe-area-inset-left); --sar:env(safe-area-inset-right);
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#1c1b19; --panel:#24231f; --card:#2b2a26; --text:#ecebe6; --muted:#9c988d;
+    --line:#3a3833; --user:#33312c; --code:#25241f; --accent:#d97757; }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+  font:16px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+input,textarea,select{font:inherit;color:var(--text)}
+.app{display:flex;height:100dvh;width:100%}
+
+/* sidebar */
+.side{width:290px;flex:none;background:var(--panel);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;padding-top:var(--sat);padding-left:var(--sal)}
+.side-head{display:flex;align-items:center;justify-content:space-between;padding:14px 14px 8px}
+.side-head h1{font-size:17px;margin:0;font-weight:650}
+.new-btn{display:flex;align-items:center;gap:8px;margin:4px 12px 10px;padding:10px 12px;border-radius:12px;
+  background:var(--accent);color:var(--accent-text);font-weight:600;justify-content:center}
+.conv-list{flex:1;overflow-y:auto;padding:0 8px 8px;-webkit-overflow-scrolling:touch}
+.conv{display:flex;align-items:center;gap:6px;padding:10px 10px;border-radius:10px;margin:2px 0}
+.conv.active{background:var(--card)}
+.conv .t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px}
+.conv .del{opacity:.5;padding:4px 6px;font-size:14px}
+.side-foot{border-top:1px solid var(--line);padding:10px 12px calc(10px + var(--sab))}
+.side-foot button{width:100%;text-align:left;padding:8px 6px;border-radius:8px;display:flex;gap:8px;align-items:center}
+
+/* main */
+.main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
+.top{display:flex;align-items:center;gap:8px;padding:calc(8px + var(--sat)) calc(12px + var(--sar)) 8px 12px;
+  border-bottom:1px solid var(--line);background:var(--bg)}
+.icon-btn{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex:none}
+.icon-btn:active{background:var(--panel)}
+.top .title{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.model-pill{font-size:13px;padding:6px 10px;border-radius:999px;background:var(--panel);border:1px solid var(--line);
+  max-width:46vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.menu-btn{display:none}
+
+.msgs{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px calc(14px + var(--sar)) 24px 14px}
+.inner{max-width:780px;margin:0 auto}
+.msg{margin:14px 0}
+.msg.user{display:flex;justify-content:flex-end}
+.msg.user .bubble{background:var(--user);padding:10px 14px;border-radius:18px 18px 4px 18px;max-width:85%;
+  white-space:pre-wrap;word-wrap:break-word}
+.msg.user img{max-width:180px;max-height:180px;border-radius:10px;display:block;margin-bottom:6px}
+.msg.assistant .body{word-wrap:break-word;overflow-wrap:anywhere}
+.body p{margin:.5em 0}
+.body pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:10px 12px;overflow-x:auto;
+  font-size:13.5px;line-height:1.45;position:relative}
+.body code{font-family:ui-monospace,Menlo,monospace;font-size:.9em}
+.body :not(pre)>code{background:var(--code);padding:1px 5px;border-radius:5px}
+.body table{border-collapse:collapse;display:block;overflow-x:auto;font-size:14px}
+.body th,.body td{border:1px solid var(--line);padding:5px 8px}
+.body a{color:var(--accent)}
+.body blockquote{margin:.5em 0;padding-left:12px;border-left:3px solid var(--line);color:var(--muted)}
+.body img{max-width:100%}
+.meta{display:flex;gap:14px;align-items:center;font-size:12.5px;color:var(--muted);margin-top:6px;flex-wrap:wrap}
+.meta button{color:var(--muted);font-size:12.5px}
+.err{color:var(--danger);background:color-mix(in srgb,var(--danger) 10%,transparent);padding:10px 12px;border-radius:10px;font-size:14px;white-space:pre-wrap}
+.cursor::after{content:"▍";animation:blink 1s steps(1) infinite;color:var(--accent)}
+@keyframes blink{50%{opacity:0}}
+
+.empty{text-align:center;color:var(--muted);margin-top:18vh;padding:0 20px}
+.empty .logo{width:64px;height:64px;border-radius:16px;margin:0 auto 12px;display:block}
+.empty h2{color:var(--text);font-weight:600;margin:0 0 6px;font-size:22px}
+
+/* composer */
+.composer{padding:8px calc(12px + var(--sar)) calc(10px + var(--sab)) calc(12px + var(--sal));background:var(--bg)}
+.comp-box{max-width:780px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:6px 6px 6px 8px}
+.thumbs{display:flex;gap:6px;flex-wrap:wrap;padding:4px 4px 0}
+.thumb{position:relative}
+.thumb img{width:56px;height:56px;object-fit:cover;border-radius:10px;display:block}
+.thumb button{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;background:var(--text);color:var(--bg);font-size:12px}
+.comp-row{display:flex;align-items:flex-end;gap:4px}
+.comp-row textarea{flex:1;border:0;outline:0;background:transparent;resize:none;padding:8px 6px;max-height:40vh;min-height:40px;font-size:16px;line-height:1.4}
+.send{width:38px;height:38px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;flex:none}
+.send:disabled{opacity:.35}
+.send.stop{background:var(--text);color:var(--bg)}
+.attach{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;flex:none;color:var(--muted)}
+
+/* drawer for phone */
+.scrim{display:none}
+@media (max-width:760px){
+  .side{position:fixed;inset:0 auto 0 0;z-index:30;width:min(84vw,320px);transform:translateX(-102%);transition:transform .25s ease;box-shadow:0 0 30px rgba(0,0,0,.2)}
+  .app.drawer .side{transform:none}
+  .app.drawer .scrim{display:block;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:20}
+  .menu-btn{display:grid}
+}
+
+/* settings sheet */
+.sheet-wrap{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;display:none;align-items:flex-end;justify-content:center}
+.sheet-wrap.open{display:flex}
+@media (min-width:761px){.sheet-wrap{align-items:center}}
+.sheet{background:var(--bg);width:100%;max-width:560px;max-height:92dvh;overflow-y:auto;border-radius:18px 18px 0 0;
+  padding:18px 18px calc(18px + var(--sab))}
+@media (min-width:761px){.sheet{border-radius:18px}}
+.sheet h3{margin:0 0 4px;font-size:19px}
+.field{margin:14px 0}
+.field label{display:block;font-weight:600;font-size:14px;margin-bottom:6px}
+.field .hint{font-size:12.5px;color:var(--muted);margin-top:5px}
+.field input[type=text],.field input[type=password],.field input[type=number],.field select,.field textarea{
+  width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);font-size:16px}
+.field textarea{min-height:80px;resize:vertical}
+.row{display:flex;gap:10px;align-items:center}
+.switch{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.switch input{width:22px;height:22px;accent-color:var(--accent)}
+.btn{padding:11px 16px;border-radius:12px;background:var(--accent);color:#fff;font-weight:600}
+.btn.ghost{background:var(--panel);color:var(--text)}
+.btn.danger{background:transparent;color:var(--danger);border:1px solid var(--line)}
+.stats{background:var(--panel);border-radius:12px;padding:10px 12px;font-size:14px}
+.toast{position:fixed;left:50%;bottom:calc(90px + var(--sab));transform:translateX(-50%);background:var(--text);color:var(--bg);
+  padding:8px 14px;border-radius:999px;font-size:14px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+.model-opt{display:flex;flex-direction:column;gap:6px}
+.model-opt label.opt{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-weight:400}
+.model-opt label.opt input{margin-top:4px;accent-color:var(--accent)}
+.model-opt small{color:var(--muted);display:block}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="scrim" id="scrim"></div>
+  <aside class="side">
+    <div class="side-head"><h1>我的 Claude</h1></div>
+    <button class="new-btn" id="newBtn">＋ 新对话</button>
+    <div class="conv-list" id="convList"></div>
+    <div class="side-foot">
+      <button id="settingsBtn">⚙️ 设置</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="top">
+      <button class="icon-btn menu-btn" id="menuBtn" aria-label="菜单">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <div class="title" id="title">新对话</div>
+      <button class="model-pill" id="modelPill"></button>
+      <button class="icon-btn" id="newBtn2" aria-label="新对话">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button>
+    </div>
+    <div class="msgs" id="msgs"><div class="inner" id="inner"></div></div>
+    <div class="composer">
+      <div class="comp-box">
+        <div class="thumbs" id="thumbs"></div>
+        <div class="comp-row">
+          <button class="attach" id="attachBtn" aria-label="添加图片">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>
+          </button>
+          <input type="file" id="fileIn" accept="image/*" multiple hidden>
+          <textarea id="input" rows="1" placeholder="给 Claude 发消息…" enterkeyhint="send"></textarea>
+          <button class="send" id="sendBtn" aria-label="发送" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Settings -->
+<div class="sheet-wrap" id="settingsWrap">
+  <div class="sheet">
+    <div class="row" style="justify-content:space-between"><h3>设置</h3><button class="btn ghost" id="closeSettings">完成</button></div>
+    <div class="field">
+      <label for="apiKey">Anthropic API Key</label>
+      <input type="password" id="apiKey" placeholder="sk-ant-..." autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="hint">在 console.anthropic.com → API Keys 创建。Key 只保存在这台设备的浏览器里，直接发给 Anthropic，不经过任何第三方。</div>
+    </div>
+    <div class="field">
+      <label>默认模型</label>
+      <div class="model-opt" id="modelOpts"></div>
+      <input type="text" id="customModel" placeholder="或填写其他模型 ID（可选）" style="margin-top:8px" autocapitalize="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="maxTokens">单次回复最大长度（tokens）</label>
+      <input type="number" id="maxTokens" min="256" max="64000" step="256">
+      <div class="hint">按实际生成的字数计费，调大不会多扣钱，只是允许更长的回复。</div>
+    </div>
+    <div class="field">
+      <label for="system">自定义指令（系统提示，可选）</label>
+      <textarea id="system" placeholder="例如：请用简体中文回答，简洁一些。"></textarea>
+    </div>
+    <div class="field switch">
+      <div><label style="margin:0">联网搜索</label><div class="hint">让 Claude 能搜网页。每次搜索另收少量费用。</div></div>
+      <input type="checkbox" id="webSearch">
+    </div>
+    <div class="field switch">
+      <div><label style="margin:0">长对话省钱（提示缓存）</label><div class="hint">连续追问时，前文按缓存价计费，通常更便宜。</div></div>
+      <input type="checkbox" id="caching">
+    </div>
+    <div class="field">
+      <label>用量统计（本设备）</label>
+      <div class="stats" id="stats"></div>
+      <div class="hint">准确账单请看 console.anthropic.com → Usage / Billing。</div>
+    </div>
+    <div class="field row">
+      <button class="btn danger" id="clearAll">删除所有对话</button>
+    </div>
+  </div>
+</div>
+
+<!-- Model quick picker -->
+<div class="sheet-wrap" id="modelWrap">
+  <div class="sheet">
+    <div class="row" style="justify-content:space-between"><h3>本对话使用的模型</h3><button class="btn ghost" id="closeModel">完成</button></div>
+    <div class="model-opt" id="modelOpts2" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+"use strict";
+const MODELS = [
+  {id:"claude-haiku-5-5",  name:"Haiku 5.5",  desc:"最快、最便宜，适合日常问答"},
+  {id:"claude-sonnet-5-5", name:"Sonnet 5.5", desc:"性价比最佳，推荐默认使用"},
+  {id:"claude-opus-5-5",   name:"Opus 5.5",   desc:"最强，适合复杂任务，价格最高"},
+];
+const API_URL = "https://api.anthropic.com/v1/messages";
+const $ = id => document.getElementById(id);
+
+/* ---------- storage ---------- */
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem("cc_"+k); return v==null ? d : JSON.parse(v);}catch{ return d; } },
+  set(k, v){ try{ localStorage.setItem("cc_"+k, JSON.stringify(v)); }catch{} }
+};
+let memStore = new Map();
+let db = null;
+function openDB(){
+  return new Promise(res => {
+    try{
+      const r = indexedDB.open("claude-chat", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("convs", {keyPath:"id"});
+      r.onsuccess = () => { db = r.result; res(); };
+      r.onerror = () => res();
+    }catch{ res(); }
+  });
+}
+function tx(mode){ return db.transaction("convs", mode).objectStore("convs"); }
+function dbAll(){
+  if(!db) return Promise.resolve([...memStore.values()]);
+  return new Promise(res => { const r = tx("readonly").getAll(); r.onsuccess = () => res(r.result||[]); r.onerror = () => res([]); });
+}
+function dbPut(c){
+  if(!db){ memStore.set(c.id, c); return Promise.resolve(); }
+  return new Promise(res => { const r = tx("readwrite").put(c); r.onsuccess = r.onerror = () => res(); });
+}
+function dbDel(id){
+  if(!db){ memStore.delete(id); return Promise.resolve(); }
+  return new Promise(res => { const r = tx("readwrite").delete(id); r.onsuccess = r.onerror = () => res(); });
+}
+function dbClear(){
+  if(!db){ memStore.clear(); return Promise.resolve(); }
+  return new Promise(res => { const r = tx("readwrite").clear(); r.onsuccess = r.onerror = () => res(); });
+}
+
+/* ---------- state ---------- */
+const settings = Object.assign({
+  apiKey:"", model:"claude-sonnet-5-5", customModel:"", maxTokens:8192, system:"", webSearch:false, caching:true
+}, LS.get("settings", {}));
+let stats = LS.get("stats", {input:0, output:0, cacheRead:0, cacheWrite:0, requests:0});
+let convs = [];
+let cur = null;           // current conversation
+let pending = [];         // pending images [{media_type,data,url}]
+let controller = null;    // AbortController while streaming
+
+const defaultModel = () => (settings.customModel||"").trim() || settings.model;
+const modelName = id => (MODELS.find(m=>m.id===id)||{}).name || id;
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+function toast(t){ const el=$("toast"); el.textContent=t; el.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>el.classList.remove("show"),1600); }
+function saveSettings(){ LS.set("settings", settings); }
+
+/* ---------- markdown ---------- */
+function md(text){
+  try{
+    if(window.marked && window.DOMPurify){
+      return DOMPurify.sanitize(marked.parse(text, {breaks:true, gfm:true}), {ADD_ATTR:["target"]});
+    }
+  }catch{}
+  const esc = text.replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  return "<p>"+esc.replace(/\n/g,"<br>")+"</p>";
+}
+
+/* ---------- rendering ---------- */
+function renderList(){
+  const list = $("convList"); list.innerHTML = "";
+  convs.sort((a,b)=>b.updated-a.updated).forEach(c => {
+    const d = document.createElement("div");
+    d.className = "conv"+(cur && c.id===cur.id ? " active":"");
+    d.innerHTML = `<span class="t"></span><button class="del" aria-label="删除">🗑</button>`;
+    d.querySelector(".t").textContent = c.title || "新对话";
+    d.onclick = e => { if(e.target.closest(".del")) return; openConv(c.id); closeDrawer(); };
+    d.querySelector(".del").onclick = async e => {
+      e.stopPropagation();
+      if(d.dataset.confirm){ await dbDel(c.id); convs = convs.filter(x=>x.id!==c.id); if(cur&&cur.id===c.id) newConv(); renderList(); }
+      else { d.dataset.confirm = 1; e.currentTarget.textContent = "确认删除"; e.currentTarget.style.color="var(--danger)"; e.currentTarget.style.opacity=1;
+             setTimeout(()=>{ if(d.isConnected){ delete d.dataset.confirm; renderList(); } }, 2500); }
+    };
+    list.appendChild(d);
+  });
+}
+
+function textOf(content){
+  if(typeof content === "string") return content;
+  return content.filter(b=>b.type==="text").map(b=>b.text).join("\n");
+}
+
+function renderMsgs(){
+  const inner = $("inner"); inner.innerHTML = "";
+  $("title").textContent = cur.title || "新对话";
+  $("modelPill").textContent = modelName(cur.model) + " ▾";
+  if(!cur.messages.length){
+    inner.innerHTML = `<div class="empty"><img class="logo" src="icon.png" alt="" onerror="this.remove()"><h2>有什么可以帮你？</h2>
+      <div>${settings.apiKey ? "按用量付费 · " + modelName(cur.model) : "请先在“设置”里填入 API Key"}</div></div>`;
+    return;
+  }
+  cur.messages.forEach((m, i) => inner.appendChild(msgEl(m, i)));
+  scrollBottom(true);
+}
+
+function msgEl(m, i){
+  const el = document.createElement("div");
+  el.className = "msg " + m.role;
+  if(m.role === "user"){
+    const b = document.createElement("div"); b.className = "bubble";
+    (Array.isArray(m.content)?m.content:[]).filter(x=>x.type==="image").forEach(x=>{
+      const img = document.createElement("img"); img.src = `data:${x.source.media_type};base64,${x.source.data}`; b.appendChild(img);
+    });
+    b.appendChild(document.createTextNode(textOf(m.content)));
+    el.appendChild(b);
+  } else {
+    const body = document.createElement("div"); body.className = "body";
+    body.innerHTML = md(textOf(m.content));
+    el.appendChild(body);
+    if(m.error){ const e = document.createElement("div"); e.className="err"; e.textContent = m.error; el.appendChild(e); }
+    const meta = document.createElement("div"); meta.className = "meta";
+    const copy = document.createElement("button"); copy.textContent = "复制";
+    copy.onclick = () => navigator.clipboard.writeText(textOf(m.content)).then(()=>toast("已复制"), ()=>toast("复制失败"));
+    meta.appendChild(copy);
+    if(i === cur.messages.length-1){
+      const re = document.createElement("button"); re.textContent = "重新生成"; re.onclick = regenerate; meta.appendChild(re);
+    }
+    if(m.usage){
+      const u = document.createElement("span");
+      u.textContent = `${modelName(m.model||"")} · 输入 ${fmt(m.usage.input)} / 输出 ${fmt(m.usage.output)} tokens`;
+      meta.appendChild(u);
+    }
+    el.appendChild(meta);
+  }
+  return el;
+}
+const fmt = n => (n||0).toLocaleString();
+
+function scrollBottom(force){
+  const s = $("msgs");
+  if(force || s.scrollHeight - s.scrollTop - s.clientHeight < 140) s.scrollTop = s.scrollHeight;
+}
+
+/* ---------- conversations ---------- */
+function newConv(){
+  cur = {id:uid(), title:"", model:defaultModel(), messages:[], updated:Date.now(), saved:false};
+  renderMsgs(); renderList();
+}
+function openConv(id){
+  if(controller) return toast("请等回复完成");
+  cur = convs.find(c=>c.id===id); renderMsgs(); renderList();
+}
+async function persist(){
+  cur.updated = Date.now();
+  if(!cur.saved){ cur.saved = true; convs.push(cur); }
+  await dbPut(cur); renderList();
+}
+
+/* ---------- images ---------- */
+function loadImage(file){
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const max = 1568; let {width:w, height:h} = img;
+      const s = Math.min(1, max/Math.max(w,h)); w = Math.round(w*s); h = Math.round(h*s);
+      const c = document.createElement("canvas"); c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      const dataUrl = c.toDataURL("image/jpeg", 0.85);
+      URL.revokeObjectURL(url);
+      res({media_type:"image/jpeg", data:dataUrl.split(",")[1], url:dataUrl});
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("图片无法读取")); };
+    img.src = url;
+  });
+}
+function renderThumbs(){
+  const t = $("thumbs"); t.innerHTML = "";
+  pending.forEach((p, i) => {
+    const d = document.createElement("div"); d.className = "thumb";
+    d.innerHTML = `<img src="${p.url}"><button aria-label="移除">✕</button>`;
+    d.querySelector("button").onclick = () => { pending.splice(i,1); renderThumbs(); updateSend(); };
+    t.appendChild(d);
+  });
+}
+
+/* ---------- sending ---------- */
+function updateSend(){
+  const b = $("sendBtn");
+  if(controller){
+    b.disabled = false; b.classList.add("stop");
+    b.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor"/></svg>`;
+  } else {
+    b.classList.remove("stop");
+    b.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>`;
+    b.disabled = !($("input").value.trim() || pending.length);
+  }
+}
+function autosize(){ const t = $("input"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, innerHeight*0.4) + "px"; }
+
+async function send(){
+  if(controller){ controller.abort(); return; }
+  const text = $("input").value.trim();
+  if(!text && !pending.length) return;
+  if(!settings.apiKey){ openSettings(); toast("请先填入 API Key"); return; }
+  const content = pending.map(p => ({type:"image", source:{type:"base64", media_type:p.media_type, data:p.data}}));
+  if(text) content.push({type:"text", text});
+  cur.messages.push({role:"user", content});
+  if(!cur.title) cur.title = (text || "图片").slice(0, 30);
+  $("input").value = ""; pending = []; renderThumbs(); autosize();
+  await persist();
+  renderMsgs();
+  await runAssistant();
+}
+
+async function regenerate(){
+  if(controller) return;
+  if(cur.messages.length && cur.messages[cur.messages.length-1].role === "assistant") cur.messages.pop();
+  renderMsgs(); await runAssistant();
+}
+
+function buildRequest(){
+  const msgs = cur.messages
+    .filter(m => !(m.role==="assistant" && !textOf(m.content).trim()))
+    .map(m => ({role:m.role, content: m.role==="assistant" ? [{type:"text", text:textOf(m.content)}] : JSON.parse(JSON.stringify(m.content))}));
+  // merge accidental consecutive same-role messages
+  const merged = [];
+  msgs.forEach(m => { const last = merged[merged.length-1]; if(last && last.role===m.role) last.content.push(...m.content); else merged.push(m); });
+  if(settings.caching && merged.length){
+    const last = merged[merged.length-1].content; last[last.length-1].cache_control = {type:"ephemeral"};
+  }
+  const body = {model:cur.model, max_tokens:Number(settings.maxTokens)||8192, stream:true, messages:merged};
+  if(settings.system.trim()) body.system = settings.system.trim();
+  if(settings.webSearch) body.tools = [{type:"web_search_20250305", name:"web_search", max_uses:5}];
+  return body;
+}
+
+async function runAssistant(){
+  const msg = {role:"assistant", content:[{type:"text", text:""}], model:cur.model};
+  cur.messages.push(msg);
+  const el = msgEl(msg, cur.messages.length-1);
+  const body = el.querySelector(".body"); body.classList.add("cursor");
+  $("inner").appendChild(el); scrollBottom(true);
+  controller = new AbortController(); updateSend();
+  const usage = {input:0, output:0, cacheRead:0, cacheWrite:0};
+  let text = "", raf = 0, searching = false;
+  const paint = () => { raf = 0; body.innerHTML = md(text + (searching ? "\n\n_🔎 正在搜索网页…_" : "")); scrollBottom(); };
+  const schedule = () => { if(!raf) raf = requestAnimationFrame(paint); };
+
+  try{
+    const res = await fetch(API_URL, {
+      method:"POST", signal:controller.signal,
+      headers:{
+        "content-type":"application/json",
+        "x-api-key":settings.apiKey.trim(),
+        "anthropic-version":"2023-06-01",
+        "anthropic-dangerous-direct-browser-access":"true"
+      },
+      body:JSON.stringify(buildRequest())
+    });
+    if(!res.ok){
+      let detail = ""; try{ const j = await res.json(); detail = j.error && j.error.message || JSON.stringify(j); }catch{ detail = await res.text().catch(()=> ""); }
+      throw new Error(explain(res.status, detail));
+    }
+    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "";
+    let lastBlockWasText = false;
+    while(true){
+      const {done, value} = await reader.read(); if(done) break;
+      buf += dec.decode(value, {stream:true});
+      let idx;
+      while((idx = buf.indexOf("\n\n")) >= 0){
+        const chunk = buf.slice(0, idx); buf = buf.slice(idx+2);
+        const line = chunk.split("\n").find(l => l.startsWith("data:")); if(!line) continue;
+        let ev; try{ ev = JSON.parse(line.slice(5).trim()); }catch{ continue; }
+        if(ev.type === "message_start" && ev.message && ev.message.usage){
+          const u = ev.message.usage; usage.input = u.input_tokens||0; usage.cacheRead = u.cache_read_input_tokens||0; usage.cacheWrite = u.cache_creation_input_tokens||0; usage.output = u.output_tokens||0;
+        } else if(ev.type === "content_block_start"){
+          const t = ev.content_block && ev.content_block.type;
+          if(t === "server_tool_use"){ searching = true; schedule(); }
+          else if(t === "web_search_tool_result"){ searching = false; schedule(); }
+          else if(t === "text" && text && !lastBlockWasText && !/\n$/.test(text)) text += "\n\n";
+          lastBlockWasText = (t === "text");
+        } else if(ev.type === "content_block_delta" && ev.delta){
+          if(ev.delta.type === "text_delta"){ text += ev.delta.text; schedule(); }
+        } else if(ev.type === "message_delta"){
+          if(ev.usage){ if(ev.usage.output_tokens!=null) usage.output = ev.usage.output_tokens;
+            if(ev.usage.input_tokens) usage.input = ev.usage.input_tokens; }
+          if(ev.delta && ev.delta.stop_reason === "max_tokens") msg.error = "回复达到最大长度被截断，可在设置里调大“单次回复最大长度”。";
+          if(ev.delta && ev.delta.stop_reason === "refusal") msg.error = "Claude 拒绝了这个请求。";
+        } else if(ev.type === "error"){
+          throw new Error(explain(0, ev.error && ev.error.message || "服务器错误"));
+        }
+      }
+    }
+  }catch(e){
+    if(e.name === "AbortError") { if(!text) msg.error = "已停止。"; }
+    else msg.error = e.message === "Failed to fetch" || e.message === "Load failed" ? "网络连接失败，请检查网络后点“重新生成”。" : e.message;
+  }finally{
+    if(raf) cancelAnimationFrame(raf);
+    searching = false;
+    msg.content = [{type:"text", text}];
+    if(usage.input || usage.output){
+      msg.usage = usage;
+      stats.input += usage.input; stats.output += usage.output; stats.cacheRead += usage.cacheRead; stats.cacheWrite += usage.cacheWrite; stats.requests++;
+      LS.set("stats", stats);
+    }
+    controller = null; updateSend();
+    await persist();
+    renderMsgs();
+  }
+}
+
+function explain(status, detail){
+  const map = {
+    400:"请求有误", 401:"API Key 无效，请到设置里检查", 403:"没有权限使用此模型或功能",
+    404:"找不到该模型，请在设置里换一个模型 ID", 413:"内容太大（图片过多或对话过长），请开新对话",
+    429:"请求过于频繁或已达到额度上限，请稍后再试", 500:"Anthropic 服务器出错，请稍后重试", 529:"Anthropic 服务器繁忙，请稍后重试"
+  };
+  let s = map[status] || (status ? "出错了（"+status+"）" : "出错了");
+  if(/credit balance/i.test(detail)) s = "API 账户余额不足，请到 console.anthropic.com 充值";
+  return s + (detail ? "\n" + detail : "");
+}
+
+/* ---------- settings UI ---------- */
+function modelRadios(container, name, selected, onPick){
+  container.innerHTML = "";
+  MODELS.forEach(m => {
+    const l = document.createElement("label"); l.className = "opt";
+    l.innerHTML = `<input type="radio" name="${name}"><span><b></b><small></small></span>`;
+    l.querySelector("b").textContent = m.name; l.querySelector("small").textContent = m.desc;
+    const r = l.querySelector("input"); r.checked = (m.id === selected);
+    r.onchange = () => onPick(m.id);
+    container.appendChild(l);
+  });
+}
+function renderStats(){
+  $("stats").innerHTML = `请求 ${fmt(stats.requests)} 次<br>输入 ${fmt(stats.input)} tokens · 输出 ${fmt(stats.output)} tokens<br>缓存读取 ${fmt(stats.cacheRead)} · 缓存写入 ${fmt(stats.cacheWrite)} tokens`;
+}
+function openSettings(){
+  $("apiKey").value = settings.apiKey; $("customModel").value = settings.customModel;
+  $("maxTokens").value = settings.maxTokens; $("system").value = settings.system;
+  $("webSearch").checked = settings.webSearch; $("caching").checked = settings.caching;
+  modelRadios($("modelOpts"), "dm", settings.model, id => { settings.model = id; saveSettings(); if(!cur.messages.length){ cur.model = defaultModel(); renderMsgs(); } });
+  renderStats();
+  $("settingsWrap").classList.add("open");
+}
+function closeSettings(){
+  settings.apiKey = $("apiKey").value.trim();
+  settings.customModel = $("customModel").value.trim();
+  settings.maxTokens = Math.max(256, Math.min(64000, Number($("maxTokens").value)||8192));
+  settings.system = $("system").value;
+  settings.webSearch = $("webSearch").checked; settings.caching = $("caching").checked;
+  saveSettings();
+  if(!cur.messages.length) cur.model = defaultModel();
+  $("settingsWrap").classList.remove("open");
+  renderMsgs();
+}
+
+/* ---------- drawer ---------- */
+const closeDrawer = () => $("app").classList.remove("drawer");
+
+/* ---------- wire up ---------- */
+async function init(){
+  await openDB();
+  convs = (await dbAll()).map(c => (c.saved = true, c));
+  newConv();
+
+  $("newBtn").onclick = $("newBtn2").onclick = () => { if(controller) return; newConv(); closeDrawer(); $("input").focus(); };
+  $("menuBtn").onclick = () => $("app").classList.add("drawer");
+  $("scrim").onclick = closeDrawer;
+  $("settingsBtn").onclick = () => { closeDrawer(); openSettings(); };
+  $("closeSettings").onclick = closeSettings;
+  $("settingsWrap").onclick = e => { if(e.target === $("settingsWrap")) closeSettings(); };
+  $("clearAll").onclick = async e => {
+    const b = e.currentTarget;
+    if(!b.dataset.confirm){ b.dataset.confirm = 1; b.textContent = "再点一次确认删除"; setTimeout(()=>{ delete b.dataset.confirm; b.textContent = "删除所有对话"; }, 3000); return; }
+    await dbClear(); convs = []; newConv(); b.textContent = "删除所有对话"; delete b.dataset.confirm; toast("已删除");
+  };
+  $("modelPill").onclick = () => {
+    if(controller) return;
+    modelRadios($("modelOpts2"), "cm", cur.model, async id => { cur.model = id; renderMsgs(); if(cur.saved) await dbPut(cur); });
+    $("modelWrap").classList.add("open");
+  };
+  $("closeModel").onclick = () => $("modelWrap").classList.remove("open");
+  $("modelWrap").onclick = e => { if(e.target === $("modelWrap")) $("modelWrap").classList.remove("open"); };
+
+  const input = $("input");
+  input.addEventListener("input", () => { autosize(); updateSend(); });
+  input.addEventListener("keydown", e => {
+    // hardware keyboard (iPad): Enter sends, Shift+Enter new line
+    if(e.key === "Enter" && !e.shiftKey && !e.isComposing && matchMedia("(hover:hover)").matches){ e.preventDefault(); send(); }
+  });
+  $("sendBtn").onclick = send;
+  $("attachBtn").onclick = () => $("fileIn").click();
+  $("fileIn").onchange = async e => {
+    for(const f of e.target.files){ try{ pending.push(await loadImage(f)); }catch(err){ toast(err.message); } }
+    e.target.value = ""; renderThumbs(); updateSend();
+  };
+  input.addEventListener("paste", async e => {
+    const files = [...(e.clipboardData && e.clipboardData.files || [])].filter(f => f.type.startsWith("image/"));
+    if(!files.length) return; e.preventDefault();
+    for(const f of files){ try{ pending.push(await loadImage(f)); }catch{} }
+    renderThumbs(); updateSend();
+  });
+
+  if(!settings.apiKey) setTimeout(openSettings, 300);
+}
+init();
+})();
+</script>
+</body>
+</html>
